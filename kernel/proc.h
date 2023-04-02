@@ -21,7 +21,7 @@ struct context {
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
-  struct context context;     // swtch() here to enter scheduler().
+  struct context context;     // switch() here to enter scheduler().
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
 };
@@ -103,4 +103,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  uint64 mask;                 //Process mask of systemcall
 };

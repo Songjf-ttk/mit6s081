@@ -277,6 +277,9 @@ fork(void)
 
   np->parent = p;
 
+  //Copy the parent mask
+  np->mask = p->mask;
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -692,4 +695,17 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+//get the number of processes
+uint64
+get_nproc(void)
+{
+  uint64 num = 0;
+  struct proc *p;
+  for(p = proc;p < &proc[NPROC];p++)
+    if(p->state != UNUSED) 
+      num++;
+  return num;
 }

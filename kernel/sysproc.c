@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -94,4 +95,34 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+//set the mask that is the symbol of systemcall invoking
+uint64
+sys_trace(void)
+{
+  int mask;
+  if(argint(0,&mask)<0)
+    return -1;
+  mask |= 1<<31;
+  
+  myproc()->mask = mask;
+  return 0;
+}
+
+//collect information about system
+//amount freedom and number of process
+uint64
+sys_sysinfo(void)
+{
+  uint64 addr;
+  struct sysinfo sinfo;
+  
+  if(argaddr(0,&addr)<0)
+    return -1;
+  sinfo.freemem = get_freemem();
+  sinfo.nproc = get_nproc();
+  if(copyout(myproc()->pagetable,addr,(char*)&sinfo,sizeof(sinfo))<0)
+    return -1;
+  return 0;
 }
