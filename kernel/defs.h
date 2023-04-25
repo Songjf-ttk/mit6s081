@@ -181,6 +181,7 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 void            vmprint(pagetable_t);
 void            vmprint_depth(pagetable_t,int);
+pagetable_t     copy_kernelpagetable();
 void            freemapwalk(pagetable_t,int);
 
 // plic.c

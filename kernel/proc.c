@@ -232,9 +232,9 @@ void
 proc_freekernelpage(struct proc *p)
 {
   uint64 va = KSTACK((int)(p-proc));
-  pte_t* pte = walk(p->kernelpage_copy,va,0);
-  if(*pte&PTE_V)
-    kfree(PTE2PA(*pte));
+  uint64 pa = walkaddr(p->kernelpage_copy,va);
+  if(pa)
+    kfree((void*)pa);
   freemapwalk(p->kernelpage_copy,0);
 }
 

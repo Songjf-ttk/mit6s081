@@ -488,7 +488,7 @@ freemapwalk(pagetable_t pagetable,int depth)
     pte_t pte = pagetable[i];
     if(pte & PTE_V){
       uint64 child = PTE2PA(pte);
-      freemapwalk(child,depth+1);
+      freemapwalk((pagetable_t)child,depth+1);
       pagetable[i] = 0;
     }
   }
