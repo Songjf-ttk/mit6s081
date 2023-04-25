@@ -47,6 +47,16 @@ kvminit()
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
+// create a copied kernel page table
+pagetable_t
+copy_kernelpagetable(){
+  pagetable_t pagetable = (pagetable_t)kalloc();
+  for(int i = 0;i<512;i++){
+    pagetable[i] = kernel_pagetable[i];
+  }
+  return pagetable;
+}
+
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
 void
@@ -463,4 +473,24 @@ void vmprint_depth(pagetable_t pagetable,int depth){
       if(depth<2) vmprint_depth((pagetable_t)child,depth+1);
     }
   }
+}
+
+// Recursively free page-table pages ,the depth is the depth of recursiving
+// But all leaf mappings don't free
+void
+freemapwalk(pagetable_t pagetable,int depth)
+{
+  // if reached leaf mappings return
+  if(depth == 2) return;
+  // there are 2^9 = 512 PTEs in pagetable
+  for(int i = 0;i<512;i++)
+  {
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      uint64 child = PTE2PA(pte);
+      freemapwalk(child,depth+1);
+      pagetable[i] = 0;
+    }
+  }
+  kfree((void*)pagetable);
 }

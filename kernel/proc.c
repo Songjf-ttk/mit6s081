@@ -34,12 +34,14 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+      // p->kstack = va;
+
+      //the above code functions has moved to the /kernel/proc.c/allocproc
   }
   kvminithart();
 }
@@ -121,6 +123,31 @@ found:
     return 0;
   }
 
+  // the process's kernel pagetable
+  p->kernelpage_copy = copy_kernelpagetable();
+  if(p->kernelpage_copy == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  // Allocate a page for the process's kernel stack.
+  // Map it high in memory, followed by an invalid
+  // guard page
+  char *pa = kalloc();
+  if(pa == 0){
+    freeproc(p);
+    release(&p->lock);
+    panic("kalloc");
+  }
+  uint64 va = KSTACK((int)(p-proc));
+  if(mappages(p->kernelpage_copy,va,PGSIZE,(uint64)pa,PTE_R | PTE_W) != 0){
+    freeproc(p);
+    release(&p->lock);
+    panic("allocproc");
+  }
+  p->kstack = va;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -141,6 +168,10 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+
+  if(p->kernelpage_copy)
+    proc_freekernelpage(p);
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -193,6 +224,18 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
+}
+
+
+// Free a process's kernel page table 
+void
+proc_freekernelpage(struct proc *p)
+{
+  uint64 va = KSTACK((int)(p-proc));
+  pte_t* pte = walk(p->kernelpage_copy,va,0);
+  if(*pte&PTE_V)
+    kfree(PTE2PA(*pte));
+  freemapwalk(p->kernelpage_copy,0);
 }
 
 // a user program that calls exec("/init")
@@ -473,6 +516,12 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        // Switch page table register to the process kernel page table
+        // and enable paging
+        w_satp(MAKE_SATP(p->kernelpage_copy));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
