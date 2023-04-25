@@ -443,15 +443,15 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 
 // print the specific contents of the page table 
-void vmprintf(pagetable_t pagetable){
+void vmprint(pagetable_t pagetable){
   printf("page table %p\n",pagetable);
   //three depth of pagetable
-  vmprintf_depth(pagetable,0);
+  vmprint_depth(pagetable,0);
 }
 
 
-//helper functions for vmprintf, depth used to know the deep of pagetable
-void vmprintf_depth(pagetable_t pagetable,int depth){
+//helper functions for vmprint, depth used to know the deep of pagetable
+void vmprint_depth(pagetable_t pagetable,int depth){
   
   // there are 2^9 = 512 PTEs in a page table
   for(int i = 0;i<512;i++){
@@ -460,7 +460,7 @@ void vmprintf_depth(pagetable_t pagetable,int depth){
       uint64 child = PTE2PA(pte);
       for(int i = 0;i<=depth;i++) printf(".. ");
       printf("%d: pte %p pa %p\n",i,pte,child);
-      if(depth<2) vmprintf_depth((pagetable_t)child,depth+1);
+      if(depth<2) vmprint_depth((pagetable_t)child,depth+1);
     }
   }
 }
