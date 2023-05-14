@@ -43,12 +43,19 @@ sys_sbrk(void)
 {
   int addr;
   int n;
+  struct proc* p;
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
+  p = myproc();
+  addr = p->sz;
   if(growproc(n) < 0)
     return -1;
+
+  // map the n to kernel memory
+  if(userpage_map_kernelpage(p->pagetable,p->kernelpage,p->sz-n,n) < 0)
+    return -1;
+
   return addr;
 }
 

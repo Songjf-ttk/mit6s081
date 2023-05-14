@@ -161,7 +161,7 @@ int             uartgetc(void);
 // vm.c
 void            kvminit(void);
 void            kvminithart(void);
-uint64          kvmpa(uint64);
+uint64          kvmpa(pagetable_t,uint64);
 void            kvmmap(uint64, uint64, uint64, int);
 int             mappages(pagetable_t, uint64, uint64, uint64, int);
 pagetable_t     uvmcreate(void);
@@ -181,8 +181,9 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 void            vmprint(pagetable_t);
 void            vmprint_depth(pagetable_t,int);
-pagetable_t     copy_kernelpagetable();
+pagetable_t     process_kvminit();
 void            freemapwalk(pagetable_t,int);
+int             userpage_map_kernelpage(pagetable_t,pagetable_t,uint64,uint64);
 
 // plic.c
 void            plicinit(void);
@@ -206,6 +207,10 @@ void            statsinc(void);
 
 // sprintf.c
 int             snprintf(char*, int, char*, ...);
+
+// vmcopin.c
+int             copyin_new(pagetable_t,char*,uint64,uint64);
+int             copyinstr_new(pagetable_t,char*,uint64,uint64);
 
 #ifdef LAB_NET
 // pci.c

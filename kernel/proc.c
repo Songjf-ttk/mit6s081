@@ -124,24 +124,24 @@ found:
   }
 
   // the process's kernel pagetable
-  p->kernelpage_copy = copy_kernelpagetable();
-  if(p->kernelpage_copy == 0){
-    freeproc(p);
-    release(&p->lock);
-    return 0;
-  }
+  p->kernelpage = process_kvminit();
+  // if(p->kernelpage == 0){
+  //   freeproc(p);
+  //   release(&p->lock);
+  //   return 0;
+  // }
 
   // Allocate a page for the process's kernel stack.
   // Map it high in memory, followed by an invalid
   // guard page
   char *pa = kalloc();
   if(pa == 0){
-    freeproc(p);
-    release(&p->lock);
+    // freeproc(p);
+    // release(&p->lock);
     panic("kalloc");
   }
-  uint64 va = KSTACK((int)(p-proc));
-  if(mappages(p->kernelpage_copy,va,PGSIZE,(uint64)pa,PTE_R | PTE_W) != 0){
+  uint64 va = KSTACK((int)(0));
+  if(mappages(p->kernelpage,va,PGSIZE,(uint64)pa,PTE_R | PTE_W) != 0){
     freeproc(p);
     release(&p->lock);
     panic("allocproc");
@@ -169,7 +169,7 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
 
-  if(p->kernelpage_copy)
+  if(p->kernelpage)
     proc_freekernelpage(p);
 
   p->pagetable = 0;
@@ -231,11 +231,13 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 void
 proc_freekernelpage(struct proc *p)
 {
-  uint64 va = KSTACK((int)(p-proc));
-  uint64 pa = walkaddr(p->kernelpage_copy,va);
+  uint64 va = KSTACK((int)(0));
+  uint64 pa = walkaddr(p->kernelpage,va);
   if(pa)
     kfree((void*)pa);
-  freemapwalk(p->kernelpage_copy,0);
+  p->kstack = 0;  
+  freemapwalk(p->kernelpage,0);
+  p->kernelpage = 0;
 }
 
 // a user program that calls exec("/init")
@@ -263,6 +265,7 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+  userpage_map_kernelpage(p->pagetable,p->kernelpage,0,PGSIZE);
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
@@ -286,11 +289,19 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
+    if(PGROUNDUP(sz + n) >= PLIC)
+      return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    userpage_map_kernelpage(p->pagetable,p->kernelpage,p->sz,n);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    int newsz = p->sz + n;
+    if(PGROUNDUP(newsz) < PGROUNDUP(p->sz)){
+      int npages = (PGROUNDUP(p->sz) - PGROUNDUP(newsz)) / PGSIZE;
+      uvmunmap(p->kernelpage,PGROUNDUP(newsz),npages,0);
+    }
   }
   p->sz = sz;
   return 0;
@@ -319,6 +330,14 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
+
+
+  // map the np usermemory to np kernel memory
+  if(userpage_map_kernelpage(np->pagetable,np->kernelpage,0,np->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -519,10 +538,12 @@ scheduler(void)
 
         // Switch page table register to the process kernel page table
         // and enable paging
-        w_satp(MAKE_SATP(p->kernelpage_copy));
+        w_satp(MAKE_SATP(p->kernelpage));
         sfence_vma();
 
         swtch(&c->context, &p->context);
+
+        kvminithart();
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
