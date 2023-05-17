@@ -532,7 +532,7 @@ userpage_map_kernelpage(pagetable_t userpage,pagetable_t kernelpage,uint64 va,ui
 {
   if(va +sz >= PLIC) return -1;
   
-  pte_t* pte;
+  pte_t *upte,*kpte;
   uint64 pa,a,last;
   uint flags;
 
@@ -540,13 +540,15 @@ userpage_map_kernelpage(pagetable_t userpage,pagetable_t kernelpage,uint64 va,ui
 
   for(a = PGROUNDUP(va);a<last;a += PGSIZE){
     
-    if((pte = walk(userpage,a,0)) == 0)
+    if((upte = walk(userpage,a,0)) == 0)
       panic("userpage_map_kernelpage: pte should exit");
 
-    pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte) & (~(PTE_U));
-    if(mappages(kernelpage,a,PGSIZE,pa,flags) != 0)
-      panic("userpage_map_kernelpage: mappages error");
+    if((kpte = walk(kernelpage,a,1)) == 0)
+      panic("userpage_map_kernelpageg: pte can't find");
+
+    pa = PTE2PA(*upte);
+    flags = PTE_FLAGS(*upte) & (~(PTE_U));
+    *kpte = PA2PTE(pa) | flags;    
   }
   return 0;
 }

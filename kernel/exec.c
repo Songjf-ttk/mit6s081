@@ -77,10 +77,7 @@ exec(char *path, char **argv)
   sp = sz;
   stackbase = sp - PGSIZE;
 
-  // mapped the user stack to kenel
-  uvmunmap(p->kernelpage,0,PGROUNDUP(p->sz) / PGSIZE,0);
-  if(userpage_map_kernelpage(pagetable,p->kernelpage,sz - PGSIZE,PGSIZE) < 0)
-    goto bad;
+ 
 
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
@@ -118,6 +115,11 @@ exec(char *path, char **argv)
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
+
+  // mapped the user stack to kenel
+  uvmunmap(p->kernelpage,0,PGROUNDUP(p->sz) / PGSIZE,0);
+  userpage_map_kernelpage(pagetable,p->kernelpage,0,sz);
+
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
