@@ -169,8 +169,6 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
 
-  if(p->kernelpage)
-    proc_freekernelpage(p);
 
   p->pagetable = 0;
   p->sz = 0;
@@ -181,6 +179,14 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  uint64 kstack_pa = kvmpa(p->kernelpage,p->kstack);
+  kfree((void*)kstack_pa);
+  p->kstack = 0;  
+  if(p->kernelpage)
+    freemapwalk(p->kernelpage);
+  p->kernelpage = 0;
+
 }
 
 // Create a user page table for a given process,
@@ -226,19 +232,6 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmfree(pagetable, sz);
 }
 
-
-// Free a process's kernel page table 
-void
-proc_freekernelpage(struct proc *p)
-{
-  uint64 va = KSTACK((int)(0));
-  uint64 pa = walkaddr(p->kernelpage,va);
-  if(pa)
-    kfree((void*)pa);
-  p->kstack = 0;  
-  freemapwalk(p->kernelpage,0);
-  p->kernelpage = 0;
-}
 
 // a user program that calls exec("/init")
 // od -t xC initcode
@@ -294,7 +287,7 @@ growproc(int n)
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
-    userpage_map_kernelpage(p->pagetable,p->kernelpage,p->sz,n);
+    userpage_map_kernelpage(p->pagetable,p->kernelpage,p->sz,sz - p->sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
     int newsz = p->sz + n;
