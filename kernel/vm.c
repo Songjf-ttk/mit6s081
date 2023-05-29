@@ -5,7 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -182,8 +183,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
-    // if((*pte & PTE_V) == 0)
-    //   panic("uvmunmap: not mapped");
+    if((*pte & PTE_V) == 0)
+      break;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -283,7 +284,8 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
-      panic("freewalk: leaf");
+      // panic("freewalk: leaf");
+      continue;
     }
   }
   kfree((void*)pagetable);
@@ -316,8 +318,10 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+    if((*pte & PTE_V) == 0){
+      // panic("uvmcopy: page not present");
+      continue;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -439,4 +443,38 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// when sbrk lazy allocate the memory be visited 
+// this function allocate the memory
+int 
+sbrk_reallocate(struct proc *p,uint64 va){
+  char *mem;
+  // uint64 top = p->sz;
+
+  // if the trapped address greater than the p->sz,just kill the process
+  if(va > p->sz)
+  {
+    kill(p->pid);
+    return -1;
+  }
+
+  // kmalloc the physical address then map the physical address and useraddress
+  va = PGROUNDDOWN(va);
+  // for(a = va;a < top;a += PGSIZE)
+  // {
+
+  // }
+  mem = kalloc();
+  if(mem == 0){
+    // uvmdealloc(p->pagetable,a,va);
+    return -1;
+  }
+  memset(mem,0,PGSIZE);
+  if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+    kfree(mem);
+    // uvmdealloc(p->pagetable,a,va);
+    return -1;
+  }
+  return 1;
 }

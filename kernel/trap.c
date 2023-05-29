@@ -72,24 +72,9 @@ usertrap(void)
     syscall();
   }
   else if(trap_scause == 13 || trap_scause == 15){
-    char *mem;
-    uint64 va = r_stval(),a,top = p->sz;
-
-    va = PGROUNDDOWN(va);
-    for(a = va;a < top;a += PGSIZE)
-    {
-      mem = kalloc();
-      if(mem == 0){
-        uvmdealloc(p->pagetable,a,va);
-        break;
-      }
-      memset(mem,0,PGSIZE);
-      if(mappages(p->pagetable,a,PGSIZE,(uint64)mem,PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-        kfree(mem);
-        uvmdealloc(p->pagetable,a,va);
-        break;
-      }
-    }
+    uint64 va = r_stval();
+    if(sbrk_reallocate(p,va) < 0)
+      exit(-1);
   } 
   else if((which_dev = devintr()) != 0){
     // ok
