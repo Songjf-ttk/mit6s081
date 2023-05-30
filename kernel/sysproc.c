@@ -48,6 +48,8 @@ sys_sbrk(void)
   if(argint(0, &n) < 0)
     return -1;
   p = myproc();
+  if(p->sz > MAXVA - n)
+    return -1;
   addr = p->sz;
   // if(growproc(n) < 0)
   //   return -1;

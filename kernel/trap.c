@@ -73,8 +73,9 @@ usertrap(void)
   }
   else if(trap_scause == 13 || trap_scause == 15){
     uint64 va = r_stval();
-    if(sbrk_reallocate(p,va) < 0)
-      exit(-1);
+    // if(sbrk_reallocate(p,va) < 0)
+    //   panic("usertrap: sbrk_reallpcate failed");
+    sbrk_reallocate(p,va);
   } 
   else if((which_dev = devintr()) != 0){
     // ok

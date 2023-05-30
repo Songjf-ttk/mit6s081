@@ -74,17 +74,11 @@ sys_read(void)
   struct file *f;
   int n;
   uint64 p;
-  struct proc *pc;
-  uint64 pa;
+
 
   if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
     return -1;
-
-  pc = myproc();
-  pa = walkaddr(pc->pagetable,PGROUNDDOWN(p));
-  if ( !pa && sbrk_reallocate(pc, p) < 0)
-    return -1;
-
+  
   return fileread(f, p, n);
 }
 
@@ -94,18 +88,10 @@ sys_write(void)
   struct file *f;
   int n;
   uint64 p;
-  struct proc *pc;
-  uint64 pa;
 
   if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
     return -1;
-
-  pc = myproc();
-  pa = walkaddr(pc->pagetable,PGROUNDDOWN(p));
-  // int tmp = (PA2PTE(pa) &PTE_V);
-  if (!pa && sbrk_reallocate(pc, p) < 0)
-    return -1;
-
+  
   return filewrite(f, p, n);
 }
 

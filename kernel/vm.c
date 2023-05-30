@@ -97,17 +97,24 @@ walkaddr(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
   uint64 pa;
+  struct proc *p;
 
   if(va >= MAXVA)
     return 0;
 
   pte = walk(pagetable, va, 0);
+
+  if(pte == 0 || (*pte & PTE_V) == 0){
+    p = myproc();
+    if(sbrk_reallocate(p,va) < 0)
+      return 0;
+      // panic("walkaddr: sbrk_reallocate failed");
+    pte = walk(pagetable,va,0);
+  }
   if(pte == 0)
     return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
-  if((*pte & PTE_U) == 0)
-    return 0;
+  // if((*pte & PTE_V) == 0)
+  //   return 0;
   pa = PTE2PA(*pte);
   return pa;
 }
@@ -455,9 +462,11 @@ sbrk_reallocate(struct proc *p,uint64 va){
   // uint64 top = p->sz;
 
   // if the trapped address greater than the p->sz,just kill the process
-  if(va > p->sz)
+  if(va >= p->sz|| va <= p->trapframe->sp)
   {
+    // exit(-1);
     kill(p->pid);
+    // printf("sbrk_reallocate 1\n");
     return -1;
   }
 
@@ -470,12 +479,15 @@ sbrk_reallocate(struct proc *p,uint64 va){
   mem = kalloc();
   if(mem == 0){
     // uvmdealloc(p->pagetable,a,va);
+    kill(p->pid);
+    // printf("sbrk_reallocate 2\n");
     return -1;
   }
   memset(mem,0,PGSIZE);
   if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,PTE_W|PTE_X|PTE_R|PTE_U) != 0){
     kfree(mem);
     // uvmdealloc(p->pagetable,a,va);
+    // printf("sbrk_reallocate 3\n");
     return -1;
   }
   return 1;
