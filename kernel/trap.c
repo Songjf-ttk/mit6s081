@@ -75,7 +75,7 @@ usertrap(void)
     uint64 va = r_stval();
     // if(sbrk_reallocate(p,va) < 0)
     //   panic("usertrap: sbrk_reallpcate failed");
-    sbrk_reallocate(p,va);
+    sbrk_reallocate(p,va,1);
   } 
   else if((which_dev = devintr()) != 0){
     // ok

@@ -106,7 +106,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
 
   if(pte == 0 || (*pte & PTE_V) == 0){
     p = myproc();
-    if(sbrk_reallocate(p,va) < 0)
+    if(sbrk_reallocate(p,va,0) < 0)
       return 0;
       // panic("walkaddr: sbrk_reallocate failed");
     pte = walk(pagetable,va,0);
@@ -457,17 +457,17 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 // when sbrk lazy allocate the memory be visited 
 // this function allocate the memory
 int 
-sbrk_reallocate(struct proc *p,uint64 va){
+sbrk_reallocate(struct proc *p,uint64 va,int killed){
   char *mem;
   // uint64 top = p->sz;
-
+  pte_t *pte;
   // if the trapped address greater than the p->sz,just kill the process
   if(va >= p->sz|| va <= p->trapframe->sp)
   {
     // exit(-1);
-    kill(p->pid);
+    if(killed) exit(-1);
     // printf("sbrk_reallocate 1\n");
-    return -1;
+    return 0;
   }
 
   // kmalloc the physical address then map the physical address and useraddress
@@ -476,19 +476,22 @@ sbrk_reallocate(struct proc *p,uint64 va){
   // {
 
   // }
-  mem = kalloc();
-  if(mem == 0){
-    // uvmdealloc(p->pagetable,a,va);
-    kill(p->pid);
-    // printf("sbrk_reallocate 2\n");
-    return -1;
-  }
-  memset(mem,0,PGSIZE);
-  if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-    kfree(mem);
-    // uvmdealloc(p->pagetable,a,va);
-    // printf("sbrk_reallocate 3\n");
-    return -1;
+  if((pte = walk(p->pagetable,va,0)) == 0 || (*pte & PTE_V) == 0){
+    mem = kalloc();
+    if(mem == 0){
+      // uvmdealloc(p->pagetable,a,va);
+      // kill(p->pid);
+      exit(-1);
+      // printf("sbrk_reallocate 2\n");
+      return -1;
+    }
+    memset(mem,0,PGSIZE);
+    if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      kfree(mem);
+      // uvmdealloc(p->pagetable,a,va);
+      // printf("sbrk_reallocate 3\n");
+      panic("sbrk_reallocate");
+    }
   }
   return 1;
 }
