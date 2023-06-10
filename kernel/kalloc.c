@@ -8,6 +8,7 @@
 #include "spinlock.h"
 #include "riscv.h"
 #include "defs.h"
+#include "proc.h"
 
 void freerange(void *pa_start, void *pa_end);
 
@@ -23,10 +24,39 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct {
+  struct spinlock lock;
+  uint64 counts[PA2NUM(PHYSTOP)+1];
+}pgcnt_refer;
+
+
+int
+P(uint64 pa){
+  int t,id;
+  id = PA2NUM(pa);
+  if(id<0||id>PA2NUM(PHYSTOP)) panic("V: id error");
+  acquire(&pgcnt_refer.lock);
+  t = --pgcnt_refer.counts[id];
+  release(&pgcnt_refer.lock);
+  return t;
+}
+
+int
+V(uint64 pa)
+{
+  int t,id;
+  id = PA2NUM(pa);
+  if(id<0||id>PA2NUM(PHYSTOP)) panic("V: id error");
+  acquire(&pgcnt_refer.lock);
+  t = ++pgcnt_refer.counts[id];
+  release(&pgcnt_refer.lock);
+  return t;
+}
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&pgcnt_refer.lock, "cow");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -35,6 +65,8 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
+  for(int i = 0;i<sizeof pgcnt_refer.counts / sizeof (uint64);i++)
+    pgcnt_refer.counts[i] = 1;
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
 }
@@ -47,6 +79,7 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  uint64 count;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
@@ -57,8 +90,13 @@ kfree(void *pa)
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+  count = P((uint64)pa);
+  if(count < 0)
+    panic("kfree: the num of used shouldn't below zero");
+  if(count == 0){
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+  }
   release(&kmem.lock);
 }
 
@@ -74,6 +112,7 @@ kalloc(void)
   r = kmem.freelist;
   if(r)
     kmem.freelist = r->next;
+  V((uint64)r);
   release(&kmem.lock);
 
   if(r)

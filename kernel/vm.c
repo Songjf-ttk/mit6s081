@@ -5,7 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -156,8 +157,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("remap");
+    // if(*pte & PTE_V)
+    //   panic("remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -311,22 +312,26 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    *pte &= (~PTE_W);
+    *pte |= PTE_C;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      // kfree(mem);
       goto err;
     }
+    V((uint64)pa);
   }
   return 0;
 
@@ -354,8 +359,13 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
-
+  uint64  n,va0,pa0;
+  // pte_t *pte;
+  // uint flags;
+  // struct proc *p = myproc();
+  // va0 = PGROUNDDOWN(dstva);
+  // va1 = PGROUNDDOWN((uint64)src);
+  // len = PGROUNDUP(len);
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
@@ -369,6 +379,29 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     len -= n;
     src += n;
     dstva = va0 + PGSIZE;
+
+    // if((pte = walk(p->pagetable,va1,0)) == 0)
+    //   panic("copyout: pte should exit");
+
+    // if((*pte & PTE_V) == 0)
+    //   panic("copyout: page not present");
+    
+    // *pte &= ~PTE_W;
+    // *pte |= PTE_C;
+
+    // pa = PTE2PA(*pte);
+    // flags = PTE_FLAGS(*pte);
+
+    // acquire(&pgcnt_refer.lock);
+    // pgcnt_refer.counts[PA2NUM(pa)]++;
+    // release(&pgcnt_refer.lock);
+
+    // if(mappages(pagetable,va0,PGSIZE,(uint64)pa,flags) != 0)
+    //   panic("copyout: mappages failed");
+    
+    // len -= PGSIZE;
+    // va0 += PGSIZE;
+    // va1 += PGSIZE;
   }
   return 0;
 }
@@ -439,4 +472,53 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+pte_t*
+PageFault_handler(uint64 va,int killed)
+{
+  struct proc *p;
+  pte_t* pte; 
+  char *mem;
+  uint64 pa;
+  uint flags;
+
+  p = myproc();
+  va = PGROUNDDOWN(va);
+
+  if(va >= MAXVA||va >= p->sz)
+  {
+    if(killed) exit(-1);
+    return 0;
+  }
+
+  if((pte = walk(p->pagetable,va,0)) == 0)
+    panic("PageFaulthandler: pte should exit");
+
+  if((*pte & PTE_V) == 0)
+    panic("PageFaulthandler: page not present");
+
+  // if((*pte & PTE_C) == 0)
+  //   panic("PageFaulthandler: pte should be cow page");
+
+  if((*pte & PTE_W) != 0)
+    panic("PageFaulthandler: cow page should not be writable");
+
+  *pte |= PTE_W;
+  *pte &= (~PTE_C);
+  pa = PTE2PA(*pte);
+  flags = PTE_FLAGS(*pte);
+
+  if((mem = kalloc()) == 0)
+    panic("PageFaulthandler: kalloc failed");
+  
+  memmove(mem,(char*)pa,PGSIZE);
+
+  if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,flags)!=0){
+    kfree(mem);
+    uvmunmap(p->pagetable,va,1,1);
+    exit(-1);
+  }
+  kfree((void*)pa);
+  return pte;
 }
