@@ -84,19 +84,21 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+
+  count = P((uint64)pa);
+
+  if(count < 0)
+    panic("kfree: the num of used shouldn't below zero");
+  if(count>0) return;
+
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  memset(pa, 1, PGSIZE);  
 
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
-  count = P((uint64)pa);
-  if(count < 0)
-    panic("kfree: the num of used shouldn't below zero");
-  if(count == 0){
-    r->next = kmem.freelist;
-    kmem.freelist = r;
-  }
+  r->next = kmem.freelist;
+  kmem.freelist = r;
   release(&kmem.lock);
 }
 
