@@ -112,9 +112,10 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
-  V((uint64)r);
+    V((uint64)r);
+  }
   release(&kmem.lock);
 
   if(r)

@@ -69,7 +69,8 @@ usertrap(void)
     syscall();
   }
   else if(utp_scause == 13 || utp_scause == 15){
-    PageFault_handler(r_stval(),1);
+    if(PageFault_handler(p->pagetable,r_stval(),1) < 0)
+      p->killed = 1;
   }
   else if((which_dev = devintr()) != 0){
     // ok
